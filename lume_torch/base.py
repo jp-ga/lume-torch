@@ -934,7 +934,7 @@ class LUMETorchModel(LUMEModel):
         self._supported_variables = self._build_supported_variables()
         self._initialized: bool = False
 
-        # Best-effort default initialization: when every input variable has a
+        # Default initialization: when every input variable has a
         # default_value, populate the cache (inputs + computed outputs) so get()
         # works before any explicit set(). Models with an input lacking a default
         # stay lazy and initialize on first set().
