@@ -934,6 +934,18 @@ class LUMETorchModel(LUMEModel):
         self._supported_variables = self._build_supported_variables()
         self._initialized: bool = False
 
+        # Best-effort default initialization: when every input variable has a
+        # default_value, populate the cache (inputs + computed outputs) so get()
+        # works before any explicit set(). Models with an input lacking a default
+        # stay lazy and initialize on first set().
+        if all(
+            getattr(var, "default_value", None) is not None
+            for var in self.torch_model.input_variables
+        ):
+            self._set({})
+
+        self._initial_cache: dict[str, Any] = dict(self._cache)
+
     def _build_supported_variables(self) -> dict[str, Variable]:
         """Build the supported-variables dict once.
 
@@ -1037,14 +1049,15 @@ class LUMETorchModel(LUMEModel):
 
     def reset(self) -> None:
         """
-        Clear the input/output cache and reset initialization state.
+        Reset to the initial state captured at construction.
 
-        For stateless surrogate models, this simply clears the cached values
-        and resets the initialization flag. The model itself has no internal
-        state to reset.
+        For models whose inputs are all defaulted this restores the
+        default-populated cache (inputs + computed outputs), so get() works
+        after reset() exactly as after construction. For models that were not
+        default-initialized this restores an empty cache.
         """
-        self._cache.clear()
-        self._initialized = False
+        self._cache = dict(self._initial_cache)
+        self._initialized = bool(self._initial_cache)
 
     @property
     def supported_variables(self) -> dict[str, Variable]:

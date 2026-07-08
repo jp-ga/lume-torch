@@ -264,14 +264,34 @@ class TestLUMETorchModel:
         return SimpleModel(**simple_variables)
 
     def test_init_with_torch_model(self, simple_torch_model):
-        """Test initialization of LUMETorchModel with a torch model."""
+        """Fully-defaulted inputs are set at construction (inputs + outputs)."""
         wrapper = LUMETorchModel(simple_torch_model)
         assert wrapper.torch_model == simple_torch_model
-        assert wrapper._cache == {}  # Starts with empty cache
+        assert wrapper._initialized is True
+        assert wrapper._cache["input1"] == 1.0
+        assert wrapper._cache["input2"] == 2.0
+        assert wrapper._cache["output1"] == 2.0  # 1.0 * 2
+        assert wrapper._cache["output2"] == 4.0  # 2.0 * 2
 
-    def test_get_before_set_raises_error(self, simple_torch_model):
-        """Test that calling get() before set() raises a helpful error."""
-        wrapper = LUMETorchModel(simple_torch_model)
+    def test_get_before_set_raises_error(self):
+        """A model with an input lacking a default is not auto-initialized, so
+        get() before set() still raises a helpful error."""
+        model = SimpleModel(
+            input_variables=[
+                TorchScalarVariable(
+                    name="input1", value_range=(0.0, 5.0)
+                ),  # no default
+                TorchScalarVariable(
+                    name="input2", default_value=2.0, value_range=(1.0, 3.0)
+                ),
+            ],
+            output_variables=[
+                TorchScalarVariable(name="output1"),
+                TorchScalarVariable(name="output2"),
+            ],
+        )
+        wrapper = LUMETorchModel(model)
+        assert wrapper._initialized is False
 
         # Trying to get values before setting any inputs should raise KeyError
         with pytest.raises(KeyError) as exc_info:
@@ -323,21 +343,20 @@ class TestLUMETorchModel:
         assert variables["output2"].read_only is True
 
     def test_reset(self, simple_torch_model):
-        """Test reset functionality clears the cache."""
+        """Test reset restores the default-initialized state."""
         wrapper = LUMETorchModel(simple_torch_model)
 
-        # Set initial state
-        wrapper.set({"input1": 2.0, "input2": 1.5})
-        assert wrapper._cache["input1"] == 2.0
-        assert wrapper._cache["output1"] == 4.0
-
-        # Change state
+        # Change state away from the construction defaults
         wrapper.set({"input1": 5.0})
         assert wrapper._cache["input1"] == 5.0
 
-        # Reset clears the cache
+        # Reset restores the default-populated cache, not an empty one
         wrapper.reset()
-        assert wrapper._cache == {}
+        assert wrapper._initialized is True
+        assert wrapper._cache["input1"] == 1.0
+        assert wrapper._cache["input2"] == 2.0
+        assert wrapper._cache["output1"] == 2.0  # 1.0 * 2
+        assert wrapper._cache["output2"] == 4.0  # 2.0 * 2
 
     def test_dump_and_load(self, simple_torch_model, tmp_path):
         """Test dumping and loading the wrapper."""
